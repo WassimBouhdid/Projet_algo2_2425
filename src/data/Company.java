@@ -44,4 +44,8 @@ public class Company {
     public void setStopTimes(List<StopTime> stopTimes) {
         this.stopTimes = stopTimes;
     }
+
+    public String getName() {
+        return name;
+    }
 }

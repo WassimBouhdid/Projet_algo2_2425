@@ -5,7 +5,11 @@ import data.Stop;
 import java.util.*;
 
 public class Graph {
-    private final Map<Stop, List<Edge>> adj = new HashMap<>();
+    private final Map<Stop, List<Edge>> adj;
+
+    public Graph(int expectedStops) {
+        this.adj = new HashMap<>(expectedStops);
+    }
 
     public void addStop(Stop s) {
         adj.putIfAbsent(s, new ArrayList<>());

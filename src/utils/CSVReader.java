@@ -70,24 +70,50 @@ public class CSVReader {
         return trips;
     }
 
+    /**
+     * Parse une ligne CSV en respectant les guillemets.
+     * @return un tableau de champs (sans les guillemets de délimitation).
+     */
+    private String[] parseCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder sb = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                // bascule l'état "entre guillemets", et n'ajoute pas le guillemet
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                // virgule séparatrice hors guillemets → fin de champ
+                fields.add(sb.toString());
+                sb.setLength(0);
+            } else {
+                sb.append(c);
+            }
+        }
+        // dernier champ
+        fields.add(sb.toString());
+        return fields.toArray(new String[0]);
+    }
+
     private List<Stop> loadStops(String filename) {
         List<Stop> stops = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-            br.readLine();
+            br.readLine(); // skip header
             String line;
             while ((line = br.readLine()) != null) {
-                String[] value = line.split(",");
+                // on parse correctement la ligne
+                String[] value = parseCsvLine(line);
+                // value[1] peut contenir des virgules mais est déjà bien extrait
+                String id   = value[0].trim();
+                String name = value[1].trim();
+                double lat  = Double.parseDouble(value[2].trim());
+                double lon  = Double.parseDouble(value[3].trim());
 
-                Stop newStops = new Stop(value[0], value[1], Double.parseDouble(value[2]), Double.parseDouble(value[3]));
-                stops.add(newStops);
+                stops.add(new Stop(id, name, lat, lon));
             }
-
-        } catch (FileNotFoundException e) {
-            System.out.println("Unknown File : " + filename);
-            e.printStackTrace();
         } catch (IOException e) {
-            System.out.println("An error occured while reading the file : " + filename);
-            e.printStackTrace();
+            System.err.println("Erreur lecture stops : " + e.getMessage());
         }
         return stops;
     }
