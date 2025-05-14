@@ -24,4 +24,8 @@ public class Stop {
     public double getLat() {
         return lat;
     }
+
+    public String getStopName() {
+        return name;
+    }
 }

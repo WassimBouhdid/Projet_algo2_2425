@@ -4,105 +4,137 @@ import algorithm.graph.Edge;
 import algorithm.graph.Graph;
 import algorithm.graph.GraphBuilder;
 import data.Company;
+import data.Route;
 import data.Stop;
 import data.StopTime;
+import data.Trip;
 import utils.CSVReader;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class Main {
     private static final String[] AGENCIES = { "STIB", "TEC", "DELIJN", "SNCB" };
-    private static final Path BASE_DIR = Paths.get("src", "resources");
+    private static final Path BASE_DIR      = Paths.get("src", "resources");
 
     public static void main(String[] args) {
-        if (args.length != 2) {
-            printUsageAndExit();
-        }
         String sourceId = args[0];
         String targetId = args[1];
+        LocalTime departure = parseTimeOrExit(args[2]);
 
-        // **Début du timer global**
-        long totalStart = System.nanoTime();
-        System.out.println("→ Benchmark démarré");
+        System.out.println("→ Itinéraire de " + sourceId +
+                " vers " + targetId +
+                " à partir de " + departure);
 
-        // 1) Chargement des compagnies
+        // Démarrage du benchmark global
+        long globalStart = System.nanoTime();
+
+        // 2) Chargement des compagnies
         long t0 = System.nanoTime();
         List<Company> companies = loadAllCompanies();
-        long t1 = System.nanoTime();
         printCounts(companies);
-        System.out.printf("⏱ Chargement compagnies : %.2f ms%n", (t1 - t0) / 1_000_000.0);
+        long t1 = System.nanoTime();
+        System.out.printf("⏱ Chargement : %.2f ms%n", (t1 - t0)/1e6);
 
-        // 2) Fusion des stops et stopTimes
+        // 3) Fusion des listes stops et stopTimes
         long t2 = System.nanoTime();
-        List<Stop> allStops = companies.stream()
-                .flatMap(c -> c.getStops().stream())
-                .collect(Collectors.toList());
-        List<StopTime> allStopTimes = companies.stream()
-                .flatMap(c -> c.getStopTimes().stream())
-                .collect(Collectors.toList());
+        List<Stop>     allStops     = new ArrayList<>();
+        List<StopTime> allStopTimes = new ArrayList<>();
+        for (Company c : companies) {
+            allStops   .addAll(c.getStops());
+            allStopTimes.addAll(c.getStopTimes());
+        }
         long t3 = System.nanoTime();
-        System.out.printf("⏱ Fusion données       : %.2f ms%n", (t3 - t2) / 1_000_000.0);
+        System.out.printf("⏱ Fusion data : %.2f ms%n", (t3 - t2)/1e6);
 
-        // 3) Construction du graphe
+        // 4) Construction du graphe (timetabled + marche)
         long t4 = System.nanoTime();
         Graph graph = GraphBuilder.buildStaticGraph(allStops, allStopTimes);
         long t5 = System.nanoTime();
-        System.out.printf("⏱ Construction graphe  : %.2f ms%n", (t5 - t4) / 1_000_000.0);
-        System.out.printf("    → Nœuds : %d, Arêtes : %d%n",
-                graph.getStops().size(), allStopTimes.size());
+        System.out.printf("⏱ Graphe      : %.2f ms • %d nœuds, %d arêtes%n",
+                (t5 - t4)/1e6, graph.getStops().size(), allStopTimes.size());
 
-        // 4) Préparation des arrêts source/target
-        Map<String, Stop> stopMap = allStops.stream()
-                .collect(Collectors.toMap(Stop::getStopId, s -> s));
-        Stop source = stopMap.get(sourceId);
-        Stop target = stopMap.get(targetId);
-        if (source == null || target == null) {
-            System.err.println("❌ Stop introuvable !");
-            if (source == null) System.err.println("   • Source : " + sourceId);
-            if (target == null) System.err.println("   • Cible  : " + targetId);
-            System.err.println("→ Liste Stop IDs dispo :");
-            stopMap.keySet().stream().sorted().forEach(id -> System.err.println("   - " + id));
-            System.exit(2);
+        // 5) Préparation des maps Trip et Route
+        Map<String, Trip>  tripById  = new HashMap<>();
+        Map<String, Route> routeById = new HashMap<>();
+        for (Company c : companies) {
+            c.getTrips().forEach(t -> tripById.put(t.getTripId(), t));
+            c.getRoutes().forEach(r -> routeById.put(r.getRouteId(), r));
         }
 
-        // 5) Exécution Dijkstra
-        long t6 = System.nanoTime();
-        Dijkstra dijkstra = new Dijkstra(graph, source);
-        long t7 = System.nanoTime();
-        System.out.printf("⏱ Dijkstra exécution   : %.2f ms%n", (t7 - t6) / 1_000_000.0);
-        printPath("Dijkstra", dijkstra.hasPathTo(target), dijkstra.distTo(target), dijkstra.pathTo(target));
+        // 6) Lookup source / target
+        Map<String, Stop> stopById = allStops.stream()
+                .collect(Collectors.toMap(Stop::getStopId, s -> s));
+        Stop source = stopById.get(sourceId);
+        Stop target = stopById.get(targetId);
+        if (source == null || target == null) {
+            exitWithMissingStop(sourceId, targetId, stopById);
+        }
 
-        // 6) Exécution A*
+        // 7) Exécution Dijkstra (pour comparaison)
+        long t6 = System.nanoTime();
+        new Dijkstra(graph, source);  // résultat non affiché
+        long t7 = System.nanoTime();
+        System.out.printf("⏱ Dijkstra    : %.2f ms%n", (t7 - t6)/1e6);
+
+        // 8) Exécution A* (itinéraire)
         long t8 = System.nanoTime();
         AStar astar = new AStar(graph, source, target);
         long t9 = System.nanoTime();
-        System.out.printf("⏱ A* exécution         : %.2f ms%n", (t9 - t8) / 1_000_000.0);
-        printPath("A*", astar.hasPathTo(target), astar.distTo(target), astar.pathTo(target));
+        System.out.printf("⏱ A*          : %.2f ms%n", (t9 - t8)/1e6);
 
-        // **Fin du timer global**
-        long totalEnd = System.nanoTime();
-        System.out.printf("⏱ Temps total           : %.2f s%n", (totalEnd - totalStart) / 1_000_000_000.0);
+        // 9) Affichage de l’itinéraire
+        List<Edge> path = astar.pathTo(target);
+        if (path == null) {
+            System.out.println("✗ Aucun chemin trouvé.");
+        } else {
+            printItinerary(path, departure, tripById, routeById);
+        }
 
-        System.out.println("→ Benchmark terminé");
+        // Fin du benchmark global
+        long globalEnd = System.nanoTime();
+        System.out.printf("⏱ Total       : %.2f s%n", (globalEnd - globalStart)/1e9);
+    }
+
+    private static LocalTime parseTimeOrExit(String s) {
+        try {
+            return LocalTime.parse(s);
+        } catch (DateTimeParseException ex) {
+            System.err.println("✗ Heure invalide «" + s + "». Format HH:mm[:ss]");
+            System.exit(1);
+            return null;
+        }
+    }
+
+    private static void exitWithMissingStop(
+            String src, String tgt, Map<String, Stop> stopById
+    ) {
+        System.err.println("❌ Arrêt introuvable :");
+        if (!stopById.containsKey(src)) System.err.println("   • Source : " + src);
+        if (!stopById.containsKey(tgt)) System.err.println("   • Cible  : " + tgt);
+        System.err.println("→ Arrêts disponibles :");
+        stopById.keySet().stream().sorted()
+                .forEach(id -> System.err.println("   - " + id));
+        System.exit(2);
     }
 
     private static List<Company> loadAllCompanies() {
         List<Company> list = new ArrayList<>();
         for (String ag : AGENCIES) {
-            Path dir = BASE_DIR.resolve(ag);
             System.out.println("  • Chargement de " + ag + "...");
-            Company c = CSVReader.loadCompany(dir, ag);
-            list.add(c);
+            list.add(CSVReader.loadCompany(BASE_DIR.resolve(ag), ag));
         }
         return list;
     }
 
     private static void printCounts(List<Company> companies) {
         for (Company c : companies) {
-            System.out.printf("✓ [%s] Routes: %3d | Trips: %3d | Stops: %4d | StopTimes: %6d%n",
+            System.out.printf(
+                    "✓ [%s] R:%3d T:%3d S:%4d ST:%6d%n",
                     c.getName(),
                     c.getRoutes().size(),
                     c.getTrips().size(),
@@ -112,26 +144,34 @@ public class Main {
         }
     }
 
-    private static void printPath(String label, boolean hasPath, int distance, List<Edge> path) {
-        System.out.printf("→ %s résultat :%n", label);
-        if (!hasPath) {
-            System.out.println("   Aucun chemin trouvé.");
-        } else {
-            System.out.println("   Distance (s) : " + distance);
-            System.out.println("   Chemin :");
-            for (Edge e : path) {
-                System.out.printf("    %s → %s (%d s)%n",
-                        e.getFrom().getStopId(),
-                        e.getTo().getStopId(),
-                        e.getTravelTimeSeconds()
+    private static void printItinerary(
+            List<Edge> path,
+            LocalTime departure,
+            Map<String, Trip>  trips,
+            Map<String, Route> routes
+    ) {
+        LocalTime curr = departure;
+        for (Edge e : path) {
+            LocalTime next = curr.plusSeconds(e.getTravelTimeSeconds());
+            String from = e.getFrom().getStopName();
+            String to   = e.getTo().getStopName();
+
+            if (e.getTripId() == null) {
+                System.out.printf(
+                        "Walk from %s (%s) to %s (%s)%n",
+                        from, curr, to, next
+                );
+            } else {
+                Trip  t = trips.get(e.getTripId());
+                Route r = routes.get(t.getRouteId());
+                String comp = e.getTripId().split("-")[0];  // STIB, TEC, etc.
+                System.out.printf(
+                        "Take %s %s %s from %s (%s) to %s (%s)%n",
+                        comp, r.getType(), r.getShortName(),
+                        from, curr, to, next
                 );
             }
+            curr = next;
         }
-    }
-
-    private static void printUsageAndExit() {
-        System.err.println("Usage: java -cp <classpath> app.Main <source_stop_id> <target_stop_id>");
-        System.err.println("Exemple: java app.Main STIB-3515 STIB-3520");
-        System.exit(1);
     }
 }

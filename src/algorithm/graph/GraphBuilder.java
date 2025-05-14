@@ -40,7 +40,6 @@ public class GraphBuilder {
         return g;
     }
 
-    /** Même code qu’avant, renommé pour séparer : pas d’arêtes walk */
     private static Graph buildStaticGraphNoWalk(List<Stop> stops, List<StopTime> stopTimes) {
         Graph g = new Graph(stops.size());
         Map<String, Stop> stopById = new HashMap<>(stops.size());
@@ -65,7 +64,7 @@ public class GraphBuilder {
                     Stop from = stopById.get(prevId);
                     Stop to   = stopById.get(curId);
                     if (from != null && to != null) {
-                        g.addEdge(new Edge(from, to, delta));
+                        g.addEdge(new Edge(from, to, delta, st.getTripId()));
                     }
                 }
                 prevId  = curId;
