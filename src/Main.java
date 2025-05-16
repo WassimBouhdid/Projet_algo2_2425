@@ -28,6 +28,9 @@ public class Main {
             List<Company> companies = loadAllCompaniesParallel();
             printCounts(companies);
             long t1 = System.nanoTime();
+
+
+
             System.out.printf("Chargement des compagnies en : %.2f ms%n", (t1 - t0) / 1e6);
 
             // Fusion et déduplication des arrêts
@@ -39,28 +42,16 @@ public class Main {
                 allStopTimes.addAll(c.getStopTimes());
             }
             List<Stop> allStops = new ArrayList<>(uniqueStopsById.values());
+
             long fusion_t1 = System.nanoTime();
             System.out.printf("Fusion : %.2f ms%n", (fusion_t1 - fusion_t0) / 1e6);
 
 
-            /*debug
-            System.out.println("AllStops :" + allStops.size());
-            System.out.println("AllStopTimes :" + allStopTimes.size());
-            */
-
-            // Construction du graphe
-            long graph_t0 = System.nanoTime();
-            Graph graph = GraphBuilder.buildStaticGraph(allStops, allStopTimes);
-            long graph_t1 = System.nanoTime();
-            System.out.printf("Création graphe : %.2f ms%n", (graph_t1 - graph_t0) / 1e6);
-
-
-            System.out.printf("Le pré-traitment du programme à duré : %.2f ms%n", (System.nanoTime() - t0)/ 1e6);
 
             // Cartes Trip et Route
             Map<String, Trip> tripById = new HashMap<>();
             Map<String, Route> routeById = new HashMap<>();
-            companies.forEach(c -> c.getTrips().forEach(t -> tripById.put(t.tripId(), t)));
+            companies.forEach(c -> c.getTrips().forEach(t -> tripById.put(t.getIdTrip(), t)));
             companies.forEach(c -> c.getRoutes().forEach(r -> routeById.put(r.getRouteId(), r)));
 
             // Index par nom (minuscule)
@@ -69,6 +60,24 @@ public class Main {
             // Lecture interactive de la source et cible
             Stop source = readStop(sc, stopsByName, "station de départ");
             Stop target = readStop(sc, stopsByName, "station d'arrivée");
+            List<String> mod = readMod( sc);
+
+            /*
+            debug
+            System.out.println("AllStops :" + allStops.size());
+            System.out.println("AllStopTimes :" + allStopTimes.size());
+            */
+
+            // Construction du graphe
+
+            long graph_t0 = System.nanoTime();
+            Graph graph = GraphBuilder.buildStaticGraph(allStops, allStopTimes,tripById,routeById,mod);
+            long graph_t1 = System.nanoTime();
+            System.out.printf("Création graphe : %.2f ms%n", (graph_t1 - graph_t0) / 1e6);
+
+
+            System.out.printf("Le pré-traitment du programme à duré : %.2f ms%n", (System.nanoTime() - t0)/ 1e6);
+
 
             // Lecture de l'heure de départ
             LocalTime departure = readDepartureTime(sc);
@@ -120,6 +129,35 @@ public class Main {
         return chosen;
     }
 
+    private static List<String> readMod(Scanner sc) {
+        List<String> chosenTransportTypes = new ArrayList<>();
+        System.out.printf("Entrez le nom des moyens de transports voulus et séparé les par une virgule (ex : tram,metro): ");
+        String modString = sc.nextLine().trim().toLowerCase();
+        List<String> inputMod = new ArrayList<>(List.of(modString.split(",")));
+
+        if (inputMod.isEmpty()) {
+            chosenTransportTypes.add("METRO");
+            chosenTransportTypes.add("Train");
+            chosenTransportTypes.add("Tram");
+            chosenTransportTypes.add("BUS");
+            System.err.println("Tout les type de transport ont été choisis.");
+        } else{
+            if(inputMod.contains("metro")){
+                chosenTransportTypes.add("METRO");
+            }
+            if(inputMod.contains("train")){
+                chosenTransportTypes.add("TRAIN");
+            }
+            if(inputMod.contains("tram")){
+                chosenTransportTypes.add("TRAM");
+            }
+            if(inputMod.contains("bus")){
+                chosenTransportTypes.add("BUS");
+            }
+        }
+        return chosenTransportTypes;
+    }
+
     private static LocalTime readDepartureTime(Scanner sc) {
         LocalTime time;
         while (true) {
@@ -168,13 +206,13 @@ public class Main {
         for (int i = 0; i < path.size(); ) {
             Edge e0 = path.get(i);
             String curTrip = e0.getTripId();
-            String curRoute = curTrip != null ? trips.get(curTrip).routeId() : null;
+            String curRoute = curTrip != null ? trips.get(curTrip).getIdRoute() : null;
             int segment = 0, j = i;
             while (j < path.size()) {
                 Edge ej = path.get(j);
                 String tid = ej.getTripId();
                 if (curRoute == null ? tid != null : tid == null
-                        || !trips.get(tid).routeId().equals(curRoute)) break;
+                        || !trips.get(tid).getIdRoute().equals(curRoute)) break;
                 segment += ej.getTravelTimeSec();
                 j++;
             }
@@ -187,7 +225,7 @@ public class Main {
                 System.out.printf("Walk from %s (%s) to %s (%s)%n", from, t0, to, t1);
             } else {
                 Trip t = trips.get(curTrip);
-                Route r = routes.get(t.routeId());
+                Route r = routes.get(t.getIdRoute());
                 String agency = curTrip.split("-")[0];
                 System.out.printf("Take %s %s %s from %s (%s) to %s (%s)%n",
                         agency, r.getType().toUpperCase(), r.getShortName(),

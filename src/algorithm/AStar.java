@@ -61,7 +61,7 @@ public class AStar {
                     if (sched < depart) sched += 24*3600;
                     depart = sched;
                 }
-                int arrive = depart + e.getTravelTimeSec();
+                int arrive = depart + e.getTotalPoints();
                 Stop next = e.getTo();
                 if (arrive < bestTime.getOrDefault(next, Integer.MAX_VALUE)) {
                     bestTime.put(next, arrive);
@@ -87,4 +87,5 @@ public class AStar {
         double maxSpeed = 30.0; // m/s (~108 km/h)
         return (int)(dist / maxSpeed);
     }
+
 }

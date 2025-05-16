@@ -10,19 +10,21 @@ public class Edge {
     private final int travelTimeSec;
     private final String tripId;
     private final int departureTimeSec; // -1 si marche
+    private int totalPoints;
 
     // Constructeur pour arêtes timetabled
-    public Edge(Stop from, Stop to, int travelTimeSec, String tripId, int departureTimeSec) {
+    public Edge(Stop from, Stop to, int travelTimeSec,int totalPoints, String tripId, int departureTimeSec) {
         this.from = from;
         this.to = to;
         this.travelTimeSec = travelTimeSec;
         this.tripId = tripId;
         this.departureTimeSec = departureTimeSec;
+        this.totalPoints = totalPoints;
     }
 
     // Constructeur pour marche
     public Edge(Stop from, Stop to, int travelTimeSec) {
-        this(from, to, travelTimeSec, null, -1);
+        this(from, to, travelTimeSec,travelTimeSec, null, -1);
     }
 
     public Stop getFrom() { return from; }
@@ -30,4 +32,13 @@ public class Edge {
     public int getTravelTimeSec() { return travelTimeSec; }
     public String getTripId()     { return tripId;       }
     public int getDepartureTimeSec() { return departureTimeSec; }
+
+
+    public void setTotalPoints(int neglectionValue) {
+        totalPoints = neglectionValue;
+    }
+
+    public int getTotalPoints() {
+        return totalPoints;
+    }
 }
