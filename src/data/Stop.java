@@ -1,10 +1,10 @@
 package data;
 
 public class Stop {
-    private String stopId;
-    private String name;
-    private double lat;
-    private double lon;
+    private final String stopId;
+    private final String name;
+    private final double lat;
+    private final double lon;
 
     public Stop(String stopId, String name, double lat, double lon) {
         this.stopId = stopId;

@@ -88,7 +88,7 @@ public class CSVReader {
      * Lit un CSV et mappe chaque ligne en T, avec pré-allocation basée sur le comptage rapide des lignes.
      *
      * @param file   fichier CSV à lire
-     * @param mapper fonction de mappage ligne→objet
+     * @param mapper fonction de mappage
      * @param <T>    type des objets retournés
      * @return liste des objets mappés
      * @throws IOException en cas d'erreur d'I/O

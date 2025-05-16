@@ -10,7 +10,7 @@ import java.util.*;
  * Représente un graphe dirigé statique d'arrêts, avec arêtes horodatées ou piétonnes.
  * Serialization personnalisée en binaire pour éviter OOM.
  */
-public class Graph implements Serializable {
+public class Graph {
     private final Map<Stop, List<Edge>> adj;
 
     public Graph(int initialCapacity) {

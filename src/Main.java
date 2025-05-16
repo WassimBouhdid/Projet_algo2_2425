@@ -22,6 +22,7 @@ public class Main {
 
     public static void main(String[] args) {
         try (Scanner sc = new Scanner(System.in)) {
+            System.out.println("Chargement du programme...");
             // Chargement parallèle des compagnies
             long t0 = System.nanoTime();
             List<Company> companies = loadAllCompaniesParallel();
@@ -42,16 +43,24 @@ public class Main {
             System.out.printf("Fusion : %.2f ms%n", (fusion_t1 - fusion_t0) / 1e6);
 
 
+            /*debug
+            System.out.println("AllStops :" + allStops.size());
+            System.out.println("AllStopTimes :" + allStopTimes.size());
+            */
+
             // Construction du graphe
             long graph_t0 = System.nanoTime();
             Graph graph = GraphBuilder.buildStaticGraph(allStops, allStopTimes);
             long graph_t1 = System.nanoTime();
             System.out.printf("Création graphe : %.2f ms%n", (graph_t1 - graph_t0) / 1e6);
 
+
+            System.out.printf("Le pré-traitment du programme à duré : %.2f ms%n", (System.nanoTime() - t0)/ 1e6);
+
             // Cartes Trip et Route
             Map<String, Trip> tripById = new HashMap<>();
             Map<String, Route> routeById = new HashMap<>();
-            companies.forEach(c -> c.getTrips().forEach(t -> tripById.put(t.getTripId(), t)));
+            companies.forEach(c -> c.getTrips().forEach(t -> tripById.put(t.tripId(), t)));
             companies.forEach(c -> c.getRoutes().forEach(r -> routeById.put(r.getRouteId(), r)));
 
             // Index par nom (minuscule)
@@ -66,7 +75,7 @@ public class Main {
 
             System.out.printf("\n→ Itinéraire de %s vers %s à partir de %s%n%n", source.getStopName(), target.getStopName(), departure);
 
-            // Exécution A* temps-dépendant
+            // Exécution A* temps-dépendant avec indices
             long tA = System.nanoTime();
             AStar astar = new AStar(graph, source, target, departure);
             System.out.printf("A*       : %.2f ms%n", (System.nanoTime() - tA) / 1e6);
@@ -147,6 +156,7 @@ public class Main {
         );
     }
 
+
     private static void printItinerary(
             List<Edge> path,
             LocalTime departure,
@@ -158,13 +168,13 @@ public class Main {
         for (int i = 0; i < path.size(); ) {
             Edge e0 = path.get(i);
             String curTrip = e0.getTripId();
-            String curRoute = curTrip != null ? trips.get(curTrip).getRouteId() : null;
+            String curRoute = curTrip != null ? trips.get(curTrip).routeId() : null;
             int segment = 0, j = i;
             while (j < path.size()) {
                 Edge ej = path.get(j);
                 String tid = ej.getTripId();
                 if (curRoute == null ? tid != null : tid == null
-                        || !trips.get(tid).getRouteId().equals(curRoute)) break;
+                        || !trips.get(tid).routeId().equals(curRoute)) break;
                 segment += ej.getTravelTimeSec();
                 j++;
             }
@@ -177,7 +187,7 @@ public class Main {
                 System.out.printf("Walk from %s (%s) to %s (%s)%n", from, t0, to, t1);
             } else {
                 Trip t = trips.get(curTrip);
-                Route r = routes.get(t.getRouteId());
+                Route r = routes.get(t.routeId());
                 String agency = curTrip.split("-")[0];
                 System.out.printf("Take %s %s %s from %s (%s) to %s (%s)%n",
                         agency, r.getType().toUpperCase(), r.getShortName(),

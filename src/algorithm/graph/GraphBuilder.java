@@ -4,19 +4,24 @@ import data.Stop;
 import data.StopTime;
 
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.stream.*;
 
 /**
- * Optimized static graph builder for transit network.
- * Minimizes allocations and uses multithreading to build the graph in under 20s.
+ * Construction d'un graphe statique pour un réseau de transports en commun,
+ * en tenant compte des trajets (stopTimes) et des liaisons piétonnes.
+ * Intègre les horaires pour les arêtes timetabled (avec departureTimeSec).
  */
 public class GraphBuilder {
     private static final double DEFAULT_WALKING_THRESHOLD_METERS = 500.0;
-    private static final double DEFAULT_WALKING_SPEED_MPS = 1.4;
-    private static final int THREADS = Runtime.getRuntime().availableProcessors();
+    private static final double DEFAULT_WALKING_SPEED_MPS        = 1.4;
 
     public static Graph buildStaticGraph(List<Stop> stops, List<StopTime> stopTimes) {
-        return buildStaticGraph(stops, stopTimes, DEFAULT_WALKING_THRESHOLD_METERS, DEFAULT_WALKING_SPEED_MPS);
+        return buildStaticGraph(
+                stops,
+                stopTimes,
+                DEFAULT_WALKING_THRESHOLD_METERS,
+                DEFAULT_WALKING_SPEED_MPS
+        );
     }
 
     public static Graph buildStaticGraph(
@@ -25,95 +30,110 @@ public class GraphBuilder {
             double walkingThresholdMeters,
             double walkingSpeedMps
     ) {
-        // 0) Unique stops by ID
-        Map<String, Stop> stopById = new LinkedHashMap<>(stops.size());
-        for (Stop s : stops) stopById.putIfAbsent(s.getStopId(), s);
-        Stop[] uniqueStops = stopById.values().toArray(new Stop[0]);
-
-        Graph g = new Graph(uniqueStops.length);
-        for (Stop s : uniqueStops) g.addStop(s);
-
-        // 1) Timetabled edges
-        Map<String, List<StopTime>> byTrip = new HashMap<>();
-        for (StopTime st : stopTimes) {
-            byTrip.computeIfAbsent(st.getTripId(), k -> new ArrayList<>()).add(st);
+        // 0) Déduplication des arrêts par stopId
+        Map<String, Stop> uniqueById = new LinkedHashMap<>();
+        for (Stop s : stops) {
+            uniqueById.putIfAbsent(s.getStopId(), s);
         }
+        List<Stop> uniqueStops = new ArrayList<>(uniqueById.values());
 
-        ForkJoinPool fj = new ForkJoinPool(THREADS);
-        try {
-            fj.submit(() -> byTrip.values().parallelStream().forEach(seq -> {
-                seq.sort(Comparator.comparingInt(StopTime::getStopSequence));
-                String prevId = null;
-                int prevSec = 0;
-                for (StopTime st : seq) {
-                    String curId = st.getStopId();
-                    int curSec = st.getDepartureTime().toSecondOfDay();
-                    if (prevId != null) {
-                        int delta = curSec - prevSec;
-                        if (delta < 0) delta += 24 * 3600;
-                        g.addEdge(new Edge(stopById.get(prevId), stopById.get(curId), delta, st.getTripId(), prevSec));
-                    }
-                    prevId = curId;
-                    prevSec = curSec;
-                }
-            })).get();
-        } catch (InterruptedException | ExecutionException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // 2) Spatial bucketing
-        final double deltaLat = walkingThresholdMeters / 111000.0;
-        double avgLat = 0;
-        for (Stop s : uniqueStops) avgLat += s.getLat();
-        avgLat = (avgLat / uniqueStops.length) * Math.PI / 180.0;
-        final double deltaLon = walkingThresholdMeters / (111000.0 * Math.cos(avgLat));
-
-        int gx = (int) (360.0 / deltaLon) + 1;
-        int gy = (int) (180.0 / deltaLat) + 1;
-        List<Stop>[][] grid = new List[gx][gy];
+        // 1) Initialisation du graphe et mapping stopId -> Stop
+        Graph g = new Graph(uniqueStops.size());
+        Map<String, Stop> stopById = new HashMap<>(uniqueStops.size());
         for (Stop s : uniqueStops) {
-            int x = (int) ((s.getLon()+180.0) / deltaLon);
-            int y = (int) ((s.getLat()+90.0) / deltaLat);
-            var bucket = grid[x][y];
-            if (bucket == null) grid[x][y] = bucket = new ArrayList<>();
-            bucket.add(s);
+            g.addStop(s);
+            stopById.put(s.getStopId(), s);
         }
 
-        // 3) Walking edges
-        fj.submit(() -> Arrays.stream(uniqueStops).parallel().forEach(s -> {
-            int bx = (int) ((s.getLon()+180.0) / deltaLon);
-            int by = (int) ((s.getLat()+90.0) / deltaLat);
-            for (int dx = -1; dx <= 1; dx++) {
-                int nx = bx + dx;
-                if (nx < 0 || nx >= gx) continue;
-                for (int dy = -1; dy <= 1; dy++) {
-                    int ny = by + dy;
-                    if (ny < 0 || ny >= gy) continue;
-                    var bucket = grid[nx][ny];
-                    if (bucket == null) continue;
-                    for (Stop t : bucket) {
-                        if (s == t) continue;
-                        double d = haversine(s, t);
-                        if (d <= walkingThresholdMeters) {
-                            int wt = (int) Math.ceil(d / walkingSpeedMps);
-                            g.addEdge(new Edge(s, t, wt));
+        // 2) Génération parallèle des arêtes timetabled (avec horaires)
+        Map<String, List<StopTime>> byTrip = stopTimes.stream()
+                .collect(Collectors.groupingBy(StopTime::getTripId));
+
+        List<Edge> timedEdges = byTrip.values()
+                .parallelStream()
+                .flatMap(seq -> {
+                    seq.sort(Comparator.comparingInt(StopTime::getStopSequence));
+                    String prevId = null;
+                    int prevSec = 0;
+                    Stream.Builder<Edge> builder = Stream.builder();
+                    for (StopTime st : seq) {
+                        String curId = st.getStopId();
+                        int curSec = st.getDepartureTime().toSecondOfDay();
+                        if (prevId != null) {
+                            int delta = curSec - prevSec;
+                            if (delta < 0) delta += 24 * 3600;
+                            Stop from = stopById.get(prevId);
+                            Stop to   = stopById.get(curId);
+                            builder.add(new Edge(from, to, delta, st.getTripId(), prevSec));
+                        }
+                        prevId  = curId;
+                        prevSec = curSec;
+                    }
+                    return builder.build();
+                })
+                .collect(Collectors.toList());
+        timedEdges.forEach(g::addEdge);
+
+        // 3) Bucketing spatial pour marche
+        double deltaLat  = walkingThresholdMeters / 111_000.0;
+        double avgLatRad = uniqueStops.stream()
+                .mapToDouble(Stop::getLat).average().orElse(0.0) * Math.PI / 180.0;
+        double deltaLon  = walkingThresholdMeters / (111_000.0 * Math.cos(avgLatRad));
+
+        Map<Cell, List<Stop>> grid = new HashMap<>();
+        for (Stop s : uniqueStops) {
+            int x = (int) (s.getLon() / deltaLon);
+            int y = (int) (s.getLat() / deltaLat);
+            Cell c = new Cell(x, y);
+            grid.computeIfAbsent(c, k -> new ArrayList<>()).add(s);
+        }
+
+        // 4) Génération parallèle des arêtes de marche
+        List<Edge> walkEdges = uniqueStops.parallelStream()
+                .flatMap(s -> {
+                    int bx = (int) (s.getLon() / deltaLon);
+                    int by = (int) (s.getLat() / deltaLat);
+                    Stream.Builder<Edge> builder = Stream.builder();
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dy = -1; dy <= 1; dy++) {
+                            List<Stop> bucket = grid.get(new Cell(bx + dx, by + dy));
+                            if (bucket == null) continue;
+                            for (Stop t : bucket) {
+                                if (s == t) continue;
+                                double dist = haversine(s, t);
+                                if (dist <= walkingThresholdMeters) {
+                                    int walkTime = (int) Math.ceil(dist / walkingSpeedMps);
+                                    builder.add(new Edge(s, t, walkTime));
+                                }
+                            }
                         }
                     }
-                }
-            }
-        })).join();
-        fj.shutdown();
+                    return builder.build();
+                })
+                .collect(Collectors.toList());
+        walkEdges.forEach(g::addEdge);
 
         return g;
     }
 
+    /**
+     * Calcul de la distance à vol d'oiseau (haversine) entre deux arrêts.
+     */
     private static double haversine(Stop a, Stop b) {
-        final double R = 6371000;
-        double dLat = Math.toRadians(b.getLat() - a.getLat());
-        double dLon = Math.toRadians(b.getLon() - a.getLon());
-        double sinLat = Math.sin(dLat * 0.5);
-        double sinLon = Math.sin(dLon * 0.5);
-        double x = sinLat * sinLat + Math.cos(Math.toRadians(a.getLat())) * Math.cos(Math.toRadians(b.getLat())) * sinLon * sinLon;
-        return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+        final double R = 6_371_000;
+        double phi1    = Math.toRadians(a.getLat());
+        double lambda1 = Math.toRadians(a.getLon());
+        double phi2    = Math.toRadians(b.getLat());
+        double lambda2 = Math.toRadians(b.getLon());
+        double dphi    = phi2 - phi1;
+        double dlambda = lambda2 - lambda1;
+        double sinDphi    = Math.sin(dphi / 2);
+        double sinDlambda = Math.sin(dlambda / 2);
+        double h = sinDphi * sinDphi
+                + Math.cos(phi1) * Math.cos(phi2)
+                * sinDlambda * sinDlambda;
+        return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
     }
+
+    private record Cell(int x, int y) {}
 }

@@ -4,7 +4,7 @@ import data.Stop;
 
 import java.io.Serializable;
 
-public class Edge implements Serializable {
+public class Edge {
     private final Stop from;
     private final Stop to;
     private final int travelTimeSec;
