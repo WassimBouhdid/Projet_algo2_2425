@@ -2,49 +2,32 @@ package algorithm.graph;
 
 import data.Stop;
 
-public class Edge {
+import java.io.Serializable;
+
+public class Edge implements Serializable {
     private final Stop from;
     private final Stop to;
-    private final int travelTimeSeconds;  // en secondes
-    private final String tripId;          // identifiant du trip, null si marche
+    private final int travelTimeSec;
+    private final String tripId;
+    private final int departureTimeSec; // -1 si marche
 
-    /**
-     * Constructeur pour les arêtes timetabled (bus, tram, train, etc.).
-     * @param from                arrêt de départ
-     * @param to                  arrêt d'arrivée
-     * @param travelTimeSeconds   durée en secondes
-     * @param tripId              identifiant du trip (ex. "STIB-1234"), null si marche
-     */
-    public Edge(Stop from, Stop to, int travelTimeSeconds, String tripId) {
+    // Constructeur pour arêtes timetabled
+    public Edge(Stop from, Stop to, int travelTimeSec, String tripId, int departureTimeSec) {
         this.from = from;
         this.to = to;
-        this.travelTimeSeconds = travelTimeSeconds;
+        this.travelTimeSec = travelTimeSec;
         this.tripId = tripId;
+        this.departureTimeSec = departureTimeSec;
     }
 
-    /**
-     * Constructeur « simplifié » pour les liaisons piétonnes (tripId = null).
-     */
-    public Edge(Stop from, Stop to, int travelTimeSeconds) {
-        this(from, to, travelTimeSeconds, null);
+    // Constructeur pour marche
+    public Edge(Stop from, Stop to, int travelTimeSec) {
+        this(from, to, travelTimeSec, null, -1);
     }
 
-    public Stop getFrom() {
-        return from;
-    }
-
-    public Stop getTo() {
-        return to;
-    }
-
-    public int getTravelTimeSeconds() {
-        return travelTimeSeconds;
-    }
-
-    /**
-     * @return le tripId si c'est un segment timetabled, ou null pour un déplacement à pied
-     */
-    public String getTripId() {
-        return tripId;
-    }
+    public Stop getFrom() { return from; }
+    public Stop getTo()   { return to;   }
+    public int getTravelTimeSec() { return travelTimeSec; }
+    public String getTripId()     { return tripId;       }
+    public int getDepartureTimeSec() { return departureTimeSec; }
 }

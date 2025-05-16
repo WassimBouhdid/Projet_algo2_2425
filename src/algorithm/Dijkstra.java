@@ -12,7 +12,7 @@ import java.util.*;
 public class Dijkstra {
     private final Map<Stop, Integer> distTo = new HashMap<>();
     private final Map<Stop, Edge> edgeTo = new HashMap<>();
-
+    /*
     public Dijkstra(Graph G, Stop source) {
         // 1) Initialisation
         for (Stop v : G.getStops()) {
@@ -48,7 +48,7 @@ public class Dijkstra {
             edgeTo.put(w, e);
             pq.add(new Node(w, dv + weight));
         }
-    }
+    }*/
 
     /**
      * Distance (temps en secondes) jusqu’à v, ou Integer.MAX_VALUE si non joignable

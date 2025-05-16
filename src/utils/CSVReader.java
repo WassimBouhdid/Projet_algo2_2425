@@ -2,145 +2,175 @@ package utils;
 
 import data.*;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Utilitaire pour charger efficacement des fichiers CSV sans dépendances externes.
+ *
+ * <p>Cette classe optimise la lecture en :</p>
+ * <ul>
+ *   <li>Détermination rapide du nombre de lignes via un scan byte pour pré-allocation.</li>
+ *   <li>Lecture NIO avec buffer de 16 Ko pour un I/O maximal.</li>
+ *   <li>Parser CSV natif maison gérant les guillemets.</li>
+ *   <li>Parsing d'heure flexibles, supportant les heures >=24h pour GTFS.</li>
+ * </ul>
+ */
 public class CSVReader {
 
-    public static Company loadCompany(Path directory, String companyName) {
-        CSVReader csvReader = new CSVReader();
+    /**
+     * Interface fonctionnelle pour mapper un tableau de champs CSV vers un objet métier.
+     *
+     * @param <T> type de l'objet résultant
+     */
+    @FunctionalInterface
+    private interface RowMapper<T> {
+        /**
+         * Transforme un tableau de colonnes CSV en instance de T.
+         *
+         * @param columns valeurs extraites d'une ligne CSV
+         * @return l'objet mappé
+         */
+        T map(String[] columns);
+    }
+
+    /**
+     * Charge les données d'une compagnie depuis un répertoire de CSV.
+     *
+     * @param directory   chemin du dossier contenant les CSV
+     * @param companyName nom de la compagnie
+     * @return Company peuplée
+     * @throws IOException si un fichier est introuvable ou mal formé
+     */
+    public static Company loadCompany(Path directory, String companyName) throws IOException {
+        CSVReader reader = new CSVReader();
         Company company = new Company(companyName);
 
-        company.setRoutes(csvReader.loadRoutes(directory + "/routes.csv"));
-        company.setStops(csvReader.loadStops(directory + "/stops.csv"));
-        company.setTrips(csvReader.loadTrips(directory + "/trips.csv"));
-        company.setStopTimes(csvReader.loadStopTimes(directory + "/stop_times.csv"));
+        company.setRoutes(reader.readCsv(
+                directory.resolve("routes.csv"),
+                cols -> new Route(cols[0], cols[1], cols[2], cols[3])
+        ));
+        company.setStops(reader.readCsv(
+                directory.resolve("stops.csv"),
+                cols -> new Stop(
+                        cols[0].trim(),
+                        cols[1].trim(),
+                        Double.parseDouble(cols[2].trim()),
+                        Double.parseDouble(cols[3].trim())
+                )
+        ));
+        company.setTrips(reader.readCsv(
+                directory.resolve("trips.csv"),
+                cols -> new Trip(cols[0], cols[1])
+        ));
+        company.setStopTimes(reader.readCsv(
+                directory.resolve("stop_times.csv"),
+                cols -> new StopTime(
+                        cols[0],
+                        parseTime(cols[1]),
+                        cols[2],
+                        Integer.parseInt(cols[3])
+                )
+        ));
 
         return company;
     }
 
-    private List<Route> loadRoutes(String filename) {
-        List<Route> routes = new ArrayList<>();
+    /**
+     * Lit un CSV et mappe chaque ligne en T, avec pré-allocation basée sur le comptage rapide des lignes.
+     *
+     * @param file   fichier CSV à lire
+     * @param mapper fonction de mappage ligne→objet
+     * @param <T>    type des objets retournés
+     * @return liste des objets mappés
+     * @throws IOException en cas d'erreur d'I/O
+     */
+    private <T> List<T> readCsv(Path file, RowMapper<T> mapper) throws IOException {
+        int estimated = Math.max(0, countLines(file) - 1);
+        List<T> list = new ArrayList<>(estimated);
 
-
-        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
+        try (BufferedReader br = new BufferedReader(
+                Files.newBufferedReader(file, StandardCharsets.UTF_8),
+                16 * 1024
+        )) {
+            // sauter l'en-tête
             br.readLine();
             String line;
             while ((line = br.readLine()) != null) {
-                String[] value = line.split(",");
-                Route newRoute = new Route(value[0], value[1], value[2], value[3]);
-                routes.add(newRoute);
+                String[] tokens = parseCsvLine(line);
+                list.add(mapper.map(tokens));
             }
-
-        } catch (FileNotFoundException e) {
-            System.out.println("Unknown File : " + filename);
-            e.printStackTrace();
-        } catch (IOException e) {
-            System.out.println("An error occured while reading the file : " + filename);
-            e.printStackTrace();
         }
-
-        return routes;
-    }
-
-    private List<Trip> loadTrips(String filename) {
-        List<Trip> trips = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-            br.readLine();
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] value = line.split(",");
-                Trip newTrips = new Trip(value[0], value[1]);
-                trips.add(newTrips);
-            }
-
-        } catch (FileNotFoundException e) {
-            System.out.println("Unknown File : " + filename);
-            e.printStackTrace();
-        } catch (IOException e) {
-            System.out.println("An error occured while reading the file : " + filename);
-            e.printStackTrace();
-        }
-        return trips;
+        return list;
     }
 
     /**
-     * Parse une ligne CSV en respectant les guillemets.
-     * @return un tableau de champs (sans les guillemets de délimitation).
+     * Compte rapidement le nombre de lignes d'un fichier en scannant les bytes.
+     *
+     * @param file CSV à analyser
+     * @return nombre total de lignes (incluant l'en-tête)
+     * @throws IOException si le fichier ne peut être lu
+     */
+    private int countLines(Path file) throws IOException {
+        int lines = 0;
+        try (InputStream is = Files.newInputStream(file);
+             BufferedInputStream bis = new BufferedInputStream(is, 16 * 1024)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = bis.read(buffer)) != -1) {
+                for (int i = 0; i < read; i++) {
+                    if (buffer[i] == '\n') lines++;
+                }
+            }
+        }
+        return lines;
+    }
+
+    /**
+     * Analyse une ligne CSV en respectant les guillemets.
+     *
+     * @param line ligne CSV brute
+     * @return tableau des champs sans guillemets externes
      */
     private String[] parseCsvLine(String line) {
         List<String> fields = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
         boolean inQuotes = false;
-        for (int i = 0; i < line.length(); i++) {
+        for (int i = 0, len = line.length(); i < len; i++) {
             char c = line.charAt(i);
             if (c == '"') {
-                // bascule l'état "entre guillemets", et n'ajoute pas le guillemet
                 inQuotes = !inQuotes;
             } else if (c == ',' && !inQuotes) {
-                // virgule séparatrice hors guillemets → fin de champ
                 fields.add(sb.toString());
                 sb.setLength(0);
             } else {
                 sb.append(c);
             }
         }
-        // dernier champ
         fields.add(sb.toString());
         return fields.toArray(new String[0]);
     }
 
-    private List<Stop> loadStops(String filename) {
-        List<Stop> stops = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-            br.readLine(); // skip header
-            String line;
-            while ((line = br.readLine()) != null) {
-                // on parse correctement la ligne
-                String[] value = parseCsvLine(line);
-                // value[1] peut contenir des virgules mais est déjà bien extrait
-                String id   = value[0].trim();
-                String name = value[1].trim();
-                double lat  = Double.parseDouble(value[2].trim());
-                double lon  = Double.parseDouble(value[3].trim());
-
-                stops.add(new Stop(id, name, lat, lon));
-            }
-        } catch (IOException e) {
-            System.err.println("Erreur lecture stops : " + e.getMessage());
-        }
-        return stops;
-    }
-
-    private List<StopTime> loadStopTimes(String filename) {
-        List<StopTime> stopTimes = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-            br.readLine();
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] value = line.split(",");
-                LocalTime departure;
-                String[] parts = value[1].split(":");
-                int h = Integer.parseInt(parts[0]);
-                int m = Integer.parseInt(parts[1]);
-                int s = Integer.parseInt(parts[2]);
-                departure = LocalTime.of(h % 24, m, s);
-
-                stopTimes.add(new StopTime(value[0], departure, value[2], Integer.parseInt(value[3])));
-            }
-        } catch (FileNotFoundException e) {
-            System.out.println("Unknown File : " + filename);
-            e.printStackTrace();
-        } catch (IOException e) {
-            System.out.println("An error occured while reading the file : " + filename);
-            e.printStackTrace();
-        }
-        return stopTimes;
+    /**
+     * Parse l'heure au format HH:mm[:ss]
+     *
+     * @param timeStr chaîne de caractères représentant l'heure
+     * @return LocalTime
+     */
+    private static LocalTime parseTime(String timeStr) {
+        String[] parts = timeStr.split(":");
+        int h = Integer.parseInt(parts[0]);
+        int m = Integer.parseInt(parts[1]);
+        int s = (parts.length > 2) ? Integer.parseInt(parts[2]) : 0;
+        // dans GTFS, 24:00:00 ou plus valide pour service après minuit
+        return LocalTime.of(h % 24, m, s);
     }
 }
