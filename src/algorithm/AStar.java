@@ -2,7 +2,9 @@ package algorithm;
 
 import algorithm.graph.Edge;
 import algorithm.graph.Graph;
+import data.Route;
 import data.Stop;
+import data.Trip;
 
 import java.time.LocalTime;
 import java.util.*;
@@ -11,7 +13,7 @@ import java.util.*;
  * A* Shortest Paths: distTo[] = g-score, fScore = g-score + heuristic
  */
 public class AStar {
-    private record State(Stop stop, int timeSec, int gCost, int fCost, AStar.State parent, Edge via) implements Comparable<State> {
+    private record State(Stop stop, int timeSec, int gCost, int fCost, State parent, Edge via) implements Comparable<State> {
         @Override
             public int compareTo(State o) {
                 return Integer.compare(this.fCost, o.fCost);
@@ -23,20 +25,27 @@ public class AStar {
     private final Stop target;
     private final int departureSec;
     private final Map<Stop, List<Edge>> adj;
+    private final Map<String, Trip> allTrips;
+    private final Map<String, Route> allRoutes;
+    private final List<String> trasportMod;
 
-    public AStar(Graph graph, Stop source, Stop target, LocalTime departure) {
+    public AStar(Graph graph, Stop source, Map<String, Trip> allTrips, Map<String, Route> allRoutes, Stop target, LocalTime departure,List<String> trasportMod) {
         this.graph = graph;
         this.source = source;
         this.target = target;
         this.departureSec = departure.toSecondOfDay();
         this.adj = graph.getAdjacencyMap(); // suppose expose Map<Stop,List<Edge>>
+
+        this.allTrips = allTrips;
+        this.allRoutes = allRoutes;
+        this.trasportMod = trasportMod;
     }
 
     public List<Edge> pathTo() {
         PriorityQueue<State> open = new PriorityQueue<>();
         Map<Stop, Integer> bestTime = new HashMap<>();
 
-        State start = new State(source, departureSec, 0,
+        State start = new State(source, departureSec,0,
                 heuristicSec(source), null, null);
         open.add(start);
         bestTime.put(source, departureSec);
@@ -55,13 +64,26 @@ public class AStar {
 
             for (Edge e : adj.getOrDefault(cur.stop, Collections.emptyList())) {
                 int depart = cur.timeSec;
+                String transportType = "";
                 if (e.getTripId() != null) {
+                    String tripId = e.getTripId();
+                    String routeId = allTrips.get(tripId).getIdRoute();
+                    transportType = allRoutes.get(routeId).getType();
                     // horaire : on doit attendre le prochain départ
-                    int sched = e.getDepartureTimeSec();
+                    int sched = e.getTotalPoints();
                     if (sched < depart) sched += 24*3600;
                     depart = sched;
                 }
-                int arrive = depart + e.getTotalPoints();
+
+                int arrive;
+                if(trasportMod.contains(transportType)){
+                    arrive = depart + e.getTotalPoints();
+                }else{
+                    arrive = depart + e.getTotalPoints() + 100000;
+                }
+
+
+
                 Stop next = e.getTo();
                 if (arrive < bestTime.getOrDefault(next, Integer.MAX_VALUE)) {
                     bestTime.put(next, arrive);

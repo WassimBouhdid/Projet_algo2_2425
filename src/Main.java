@@ -86,7 +86,7 @@ public class Main {
 
             // Exécution A* temps-dépendant avec indices
             long tA = System.nanoTime();
-            AStar astar = new AStar(graph, source, target, departure);
+            AStar astar = new AStar(graph, source,tripById,routeById ,target, departure,mod);
             System.out.printf("A*       : %.2f ms%n", (System.nanoTime() - tA) / 1e6);
 
             // Récupération et affichage du chemin
@@ -155,6 +155,7 @@ public class Main {
                 chosenTransportTypes.add("BUS");
             }
         }
+        System.out.println("Vos choix : " + chosenTransportTypes.toString().replace("[", "").replace("]", ""));
         return chosenTransportTypes;
     }
 

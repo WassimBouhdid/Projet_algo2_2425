@@ -86,7 +86,7 @@ public class GraphBuilder {
                     }
                     return builder.build();
                 })
-                .collect(Collectors.toList());
+                .toList();
         timedEdges.forEach(g::addEdge);
 
         // 3) Bucketing spatial pour marche
