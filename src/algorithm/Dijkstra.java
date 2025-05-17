@@ -5,10 +5,10 @@ import algorithm.graph.Graph;
 import data.Stop;
 
 import java.util.*;
-
+/*
 /**
  * Calcule les plus courts chemins (en temps) depuis une source dans un graphe statique.
- */
+
 public class Dijkstra {
     private final Map<Stop, Integer> distTo = new HashMap<>();
     private final Map<Stop, Edge> edgeTo = new HashMap<>();
@@ -47,26 +47,17 @@ public class Dijkstra {
             distTo.put(w, dv + weight);
             edgeTo.put(w, e);
             pq.add(new Node(w, dv + weight));
-        }
-    }*/
 
-    /**
-     * Distance (temps en secondes) jusqu’à v, ou Integer.MAX_VALUE si non joignable
-     */
+    }
+
     public int distTo(Stop v) {
         return distTo.getOrDefault(v, Integer.MAX_VALUE);
     }
 
-    /**
-     * Existe-t-il un chemin de la source à v ?
-     */
     public boolean hasPathTo(Stop v) {
         return distTo(v) < Integer.MAX_VALUE;
     }
 
-    /**
-     * Renvoie la liste d’arêtes du plus court chemin vers v (ordre source→v), ou null
-     */
     public List<Edge> pathTo(Stop v) {
         if (!hasPathTo(v)) return null;
         LinkedList<Edge> path = new LinkedList<>();
@@ -91,4 +82,4 @@ public class Dijkstra {
             return Integer.compare(this.dist, o.dist);
         }
     }
-}
+}*/

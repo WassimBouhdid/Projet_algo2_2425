@@ -1,4 +1,5 @@
 import algorithm.AStar;
+import algorithm.CostFunction;
 import algorithm.graph.Edge;
 import algorithm.graph.Graph;
 import algorithm.graph.GraphBuilder;
@@ -66,7 +67,7 @@ public class Main {
             // Index par nom (minuscule)
             Map<String, List<Stop>> stopsByName = allStops.stream().collect(Collectors.groupingBy(s -> s.getStopName().toLowerCase()));
 
-            // Lecture interactive de la source et cible
+            // Lecture de la source et target
             Stop source = readStop(sc, stopsByName, "station de départ");
             Stop target = readStop(sc, stopsByName, "station d'arrivée");
 
@@ -75,10 +76,56 @@ public class Main {
 
             System.out.printf("\n→ Itinéraire de %s vers %s à partir de %s%n%n", source.getStopName(), target.getStopName(), departure);
 
+            System.out.println("Critère d’optimisation ?");
+            System.out.println(" 1 = Temps de parcours");
+            System.out.println(" 2 = Minimiser les changements");
+            System.out.println(" 3 = Minimiser la marche");
+            System.out.println(" 4 = Éviter certains modes");
+            int choix = Integer.parseInt(sc.nextLine().trim());
+
+            Set<String> avoidModes;
+            if (choix == 4) {
+                System.out.print("Mode(s) à éviter (séparés par des virgules), ou entrée vide : ");
+                System.out.println("(TRAIN, TRAM, BUS, WALK, METRO) ");
+                avoidModes = Arrays.stream(sc.nextLine().split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(String::toUpperCase)
+                        .collect(Collectors.toSet());
+            } else {
+                avoidModes = Collections.emptySet();
+            }
+
+            CostFunction costFunction;
+            switch (choix) {
+                case 2 -> costFunction = (e, prev) -> {
+                    int base = e.getTravelTimeSec();
+                    if (prev != null && !Objects.equals(e.getTripId(), prev.getTripId()))
+                        return base + 300;
+                    return base;
+                };
+                case 3 -> costFunction = (e, prev) -> {
+                    if (e.getTripId() == null)
+                        return e.getTravelTimeSec() * 10;
+                    return e.getTravelTimeSec();
+                };
+                case 4 -> costFunction = (e, prev) -> {
+                    String mode = e.getTripId() == null
+                            ? "WALK"
+                            : routeById.get(tripById.get(e.getTripId()).routeId()).getType().toUpperCase();
+                    return avoidModes.contains(mode)
+                            ? Integer.MAX_VALUE
+                            : e.getTravelTimeSec();
+                };
+                default -> costFunction = (e, prev) -> e.getTravelTimeSec();
+            }
+
+
+            System.out.println("Recherche du meilleure itinéraire...");
+
             // Exécution A* temps-dépendant avec indices
             long tA = System.nanoTime();
-            AStar astar = new AStar(graph, source, target, departure);
-            System.out.printf("A*       : %.2f ms%n", (System.nanoTime() - tA) / 1e6);
+            AStar astar = new AStar(graph, source, target, departure, costFunction);
 
             // Récupération et affichage du chemin
             List<Edge> path = astar.pathTo();
@@ -87,6 +134,7 @@ public class Main {
             } else {
                 printItinerary(path, departure, tripById, routeById);
             }
+            System.out.printf("A*       : %.2f ms%n", (System.nanoTime() - tA) / 1e6);
 
         } catch (ExecutionException | InterruptedException e) {
             System.err.println("Erreur durant l'exécution : " + e.getMessage());
@@ -157,12 +205,7 @@ public class Main {
     }
 
 
-    private static void printItinerary(
-            List<Edge> path,
-            LocalTime departure,
-            Map<String, Trip> trips,
-            Map<String, Route> routes
-    ) {
+    private static void printItinerary(List<Edge> path, LocalTime departure, Map<String, Trip> trips, Map<String, Route> routes) {
         if (path.isEmpty()) return;
         int elapsed = 0;
         for (int i = 0; i < path.size(); ) {

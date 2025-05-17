@@ -8,30 +8,47 @@ import java.time.LocalTime;
 import java.util.*;
 
 /**
- * A* Shortest Paths: distTo[] = g-score, fScore = g-score + heuristic
+ * A* : distTo[] = g-score, fScore = g-score + heuristic
  */
 public class AStar {
-    private record State(Stop stop, int timeSec, int gCost, int fCost, AStar.State parent, Edge via) implements Comparable<State> {
+    private record State(
+            Stop stop,
+            int timeSec,       // instant actuel en secondes depuis minuit
+            int gCost,         // coût accumulé
+            int fCost,         // gCost + heuristique
+            State parent,      // état précédent
+            Edge via           // arc emprunté pour arriver ici
+    ) implements Comparable<State> {
         @Override
-            public int compareTo(State o) {
-                return Integer.compare(this.fCost, o.fCost);
-            }
+        public int compareTo(State o) {
+            return Integer.compare(this.fCost, o.fCost);
         }
+    }
 
     private final Graph graph;
     private final Stop source;
     private final Stop target;
     private final int departureSec;
     private final Map<Stop, List<Edge>> adj;
+    private final CostFunction costFunction;
 
-    public AStar(Graph graph, Stop source, Stop target, LocalTime departure) {
-        this.graph = graph;
-        this.source = source;
-        this.target = target;
+    /**
+     * Constructeur pour initialiser A*
+     */
+    public AStar(Graph graph, Stop source, Stop target,
+                 LocalTime departure,
+                 CostFunction costFunction) {
+        this.graph        = graph;
+        this.source       = source;
+        this.target       = target;
         this.departureSec = departure.toSecondOfDay();
-        this.adj = graph.getAdjacencyMap(); // suppose expose Map<Stop,List<Edge>>
+        this.adj          = graph.getAdjacencyMap();
+        this.costFunction = costFunction;
     }
 
+    /**
+     * @return liste des Arcs empruntés pour arriver à destination.
+     */
     public List<Edge> pathTo() {
         PriorityQueue<State> open = new PriorityQueue<>();
         Map<Stop, Integer> bestTime = new HashMap<>();
@@ -42,48 +59,47 @@ public class AStar {
         bestTime.put(source, departureSec);
 
         State endState = null;
-
         while (!open.isEmpty()) {
             State cur = open.poll();
             if (cur.stop.equals(target)) {
                 endState = cur;
                 break;
             }
-            // Ignore stale states
+
             if (cur.timeSec > bestTime.getOrDefault(cur.stop, Integer.MAX_VALUE))
                 continue;
 
             for (Edge e : adj.getOrDefault(cur.stop, Collections.emptyList())) {
                 int depart = cur.timeSec;
                 if (e.getTripId() != null) {
-                    // horaire : on doit attendre le prochain départ
                     int sched = e.getDepartureTimeSec();
                     if (sched < depart) sched += 24*3600;
                     depart = sched;
                 }
-                int arrive = depart + e.getTravelTimeSec();
+
+                int c = costFunction.cost(e, cur.via);
+                int arrive = depart + c;
+
                 Stop next = e.getTo();
                 if (arrive < bestTime.getOrDefault(next, Integer.MAX_VALUE)) {
                     bestTime.put(next, arrive);
-                    int g = arrive - departureSec;
-                    int f = g + heuristicSec(next);
+                    int g  = cur.gCost + c;
+                    int f  = g + heuristicSec(next);
                     open.add(new State(next, arrive, g, f, cur, e));
                 }
             }
         }
 
         if (endState == null) return null;
-        // Reconstituer le chemin
         LinkedList<Edge> path = new LinkedList<>();
-        for (State s = endState; s.via != null; s = s.parent) {
+        for (State s = endState; s.via != null; s = s.parent)
             path.addFirst(s.via);
-        }
         return path;
     }
 
     /** Heuristique: distance à vol d'oiseau / vitesse max (en secondes) */
     private int heuristicSec(Stop s) {
-        double dist = graph.haversine(s, target);
+        double dist     = graph.haversine(s, target);
         double maxSpeed = 30.0; // m/s (~108 km/h)
         return (int)(dist / maxSpeed);
     }

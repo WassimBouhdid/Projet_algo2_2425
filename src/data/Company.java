@@ -2,6 +2,9 @@ package data;
 
 import java.util.List;
 
+/**
+ * Représente une compagnie de transport.
+ */
 public class Company {
     private final String name;
     private List<Route> routes;
@@ -9,6 +12,9 @@ public class Company {
     private List<Trip> trips;
     private List<StopTime> stopTimes;
 
+    /**
+     * @param name Nom de la compagnie (STIB, SNCB, DELIJN, TEC)
+     */
     public Company(String name) {
         this.name = name;
     }

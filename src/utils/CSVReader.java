@@ -14,15 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Utilitaire pour charger efficacement des fichiers CSV sans dépendances externes.
- *
- * <p>Cette classe optimise la lecture en :</p>
- * <ul>
- *   <li>Détermination rapide du nombre de lignes via un scan byte pour pré-allocation.</li>
- *   <li>Lecture NIO avec buffer de 16 Ko pour un I/O maximal.</li>
- *   <li>Parser CSV natif maison gérant les guillemets.</li>
- *   <li>Parsing d'heure flexibles, supportant les heures >=24h pour GTFS.</li>
- * </ul>
+ * Class permettant de charger les differents fichiers CSV.
  */
 public class CSVReader {
 
@@ -47,8 +39,8 @@ public class CSVReader {
      *
      * @param directory   chemin du dossier contenant les CSV
      * @param companyName nom de la compagnie
-     * @return Company peuplée
-     * @throws IOException si un fichier est introuvable ou mal formé
+     * @return Company
+     * @throws IOException si un fichier est introuvable ou autre erreur
      */
     public static Company loadCompany(Path directory, String companyName) throws IOException {
         CSVReader reader = new CSVReader();
@@ -113,11 +105,11 @@ public class CSVReader {
     }
 
     /**
-     * Compte rapidement le nombre de lignes d'un fichier en scannant les bytes.
+     * Compte le nombre de lignes d'un fichier en scannant les bytes.
      *
      * @param file CSV à analyser
-     * @return nombre total de lignes (incluant l'en-tête)
-     * @throws IOException si le fichier ne peut être lu
+     * @return nombre total de lignes
+     * @throws IOException si erreur
      */
     private int countLines(Path file) throws IOException {
         int lines = 0;
@@ -137,8 +129,8 @@ public class CSVReader {
     /**
      * Analyse une ligne CSV en respectant les guillemets.
      *
-     * @param line ligne CSV brute
-     * @return tableau des champs sans guillemets externes
+     * @param line ligne CSV
+     * @return tableau
      */
     private String[] parseCsvLine(String line) {
         List<String> fields = new ArrayList<>();
@@ -162,7 +154,7 @@ public class CSVReader {
     /**
      * Parse l'heure au format HH:mm[:ss]
      *
-     * @param timeStr chaîne de caractères représentant l'heure
+     * @param timeStr l'heure
      * @return LocalTime
      */
     private static LocalTime parseTime(String timeStr) {

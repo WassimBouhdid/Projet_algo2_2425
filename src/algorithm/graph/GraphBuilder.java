@@ -30,14 +30,14 @@ public class GraphBuilder {
             double walkingThresholdMeters,
             double walkingSpeedMps
     ) {
-        // 0) Déduplication des arrêts par stopId
+        //Déduplication des arrêts par stopId
         Map<String, Stop> uniqueById = new LinkedHashMap<>();
         for (Stop s : stops) {
             uniqueById.putIfAbsent(s.getStopId(), s);
         }
         List<Stop> uniqueStops = new ArrayList<>(uniqueById.values());
 
-        // 1) Initialisation du graphe et mapping stopId -> Stop
+        //Initialisation du graphe et mapping stopId -> Stop
         Graph g = new Graph(uniqueStops.size());
         Map<String, Stop> stopById = new HashMap<>(uniqueStops.size());
         for (Stop s : uniqueStops) {
@@ -45,7 +45,7 @@ public class GraphBuilder {
             stopById.put(s.getStopId(), s);
         }
 
-        // 2) Génération parallèle des arêtes timetabled (avec horaires)
+        //Génération parallèle des arêtes timetabled (avec horaires)
         Map<String, List<StopTime>> byTrip = stopTimes.stream()
                 .collect(Collectors.groupingBy(StopTime::getTripId));
 
@@ -74,7 +74,6 @@ public class GraphBuilder {
                 .collect(Collectors.toList());
         timedEdges.forEach(g::addEdge);
 
-        // 3) Bucketing spatial pour marche
         double deltaLat  = walkingThresholdMeters / 111_000.0;
         double avgLatRad = uniqueStops.stream()
                 .mapToDouble(Stop::getLat).average().orElse(0.0) * Math.PI / 180.0;
@@ -88,7 +87,7 @@ public class GraphBuilder {
             grid.computeIfAbsent(c, k -> new ArrayList<>()).add(s);
         }
 
-        // 4) Génération parallèle des arêtes de marche
+        //Génération parallèle des arêtes
         List<Edge> walkEdges = uniqueStops.parallelStream()
                 .flatMap(s -> {
                     int bx = (int) (s.getLon() / deltaLon);
@@ -117,7 +116,7 @@ public class GraphBuilder {
     }
 
     /**
-     * Calcul de la distance à vol d'oiseau (haversine) entre deux arrêts.
+     * Calcul de la distance à vol d'oiseau entre deux arrêts.
      */
     private static double haversine(Stop a, Stop b) {
         final double R = 6_371_000;

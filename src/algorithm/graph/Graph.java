@@ -7,8 +7,7 @@ import java.nio.file.Path;
 import java.util.*;
 
 /**
- * Représente un graphe dirigé statique d'arrêts, avec arêtes horodatées ou piétonnes.
- * Serialization personnalisée en binaire pour éviter OOM.
+ * Représente un graphe dirigé statique d'arrêts
  */
 public class Graph {
     private final Map<Stop, List<Edge>> adj;
