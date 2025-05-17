@@ -1,9 +1,7 @@
 package algorithm.graph;
 
-import data.Route;
 import data.Stop;
 import data.StopTime;
-import data.Trip;
 
 import java.util.*;
 import java.util.stream.*;
@@ -17,15 +15,12 @@ public class GraphBuilder {
     private static final double DEFAULT_WALKING_THRESHOLD_METERS = 500.0;
     private static final double DEFAULT_WALKING_SPEED_MPS        = 1.4;
 
-    public static Graph buildStaticGraph(List<Stop> stops, List<StopTime> stopTimes, Map<String, Trip> allTrips, Map<String, Route> allRoutes, List<String> transportMod) {
+    public static Graph buildStaticGraph(List<Stop> stops, List<StopTime> stopTimes) {
         return buildStaticGraph(
                 stops,
                 stopTimes,
                 DEFAULT_WALKING_THRESHOLD_METERS,
-                DEFAULT_WALKING_SPEED_MPS,
-                allTrips,
-                allRoutes,
-                transportMod
+                DEFAULT_WALKING_SPEED_MPS
         );
     }
 
@@ -33,10 +28,7 @@ public class GraphBuilder {
             List<Stop> stops,
             List<StopTime> stopTimes,
             double walkingThresholdMeters,
-            double walkingSpeedMps,
-            Map<String, Trip> allTrips,
-            Map<String, Route> allRoutes,
-            List<String> transportMod
+            double walkingSpeedMps
     ) {
         //Déduplication des arrêts par stopId
         Map<String, Stop> uniqueById = new LinkedHashMap<>();
@@ -66,27 +58,20 @@ public class GraphBuilder {
                     Stream.Builder<Edge> builder = Stream.builder();
                     for (StopTime st : seq) {
                         String curId = st.getStopId();
-                        String currentTripId = st.getTripId();
-                        Trip currentTrip = allTrips.get(currentTripId);
-                        String currentRouteId = currentTrip.getIdRoute();
-                        Route currentRoute = allRoutes.get(currentRouteId);
-                        String transportType = currentRoute.getType() ;
                         int curSec = st.getDepartureTime().toSecondOfDay();
                         if (prevId != null) {
                             int delta = curSec - prevSec;
                             if (delta < 0) delta += 24 * 3600;
-                            int totalPoints = 0;
-                            if (transportMod.contains(transportType)) totalPoints=delta+3600;
                             Stop from = stopById.get(prevId);
                             Stop to   = stopById.get(curId);
-                            builder.add(new Edge(from, to, delta,totalPoints, st.getTripId(), prevSec));
+                            builder.add(new Edge(from, to, delta, st.getTripId(), prevSec));
                         }
                         prevId  = curId;
                         prevSec = curSec;
                     }
                     return builder.build();
                 })
-                .toList();
+                .collect(Collectors.toList());
         timedEdges.forEach(g::addEdge);
 
         double deltaLat  = walkingThresholdMeters / 111_000.0;
