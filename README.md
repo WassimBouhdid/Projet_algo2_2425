@@ -8,28 +8,18 @@ La fonction de coût est **configurable** : temps de parcours, nombre de changem
 ## 📦 Prérequis
 
 - **Java Development Kit (JDK) 21**
+- Maven
 ---
 
 ## ⚙️ Compilation
 
 1. Placez-vous à la racine du projet (là où se trouve le dossier `src`).
 
-2. Créez un dossier pour les fichiers `.class` :
+2. Compilation
    ```bash
-   mkdir -p bin
-
-3. Compilez tout le code source 
-   - sur windows :
-   ```bash
-   javac -d bin (Get-ChildItem -Recurse -Filter *.java -Path src).FullName
+   maven clean install
    ```
-   - sur linux
+3. éxécution du programme
    ```bash
-   javac -d bin $(find src -name "*.java")
+   java -Xms2048m -Xmx8192m -jar target/GTFS-1.0-SNAPSHOT.jar
    ```
-4.Executez le fichier 
-
-   ```bash
-   java -Xms8g -Xmx8g -cp bin Main
-  ```
-
