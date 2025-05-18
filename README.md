@@ -26,10 +26,10 @@ La fonction de coût est **configurable** : temps de parcours, nombre de changem
    - sur linux
    ```bash
    javac -d bin $(find src -name "*.java")
-
+   ```
 4.Executez le fichier 
 
    ```bash
-   java -cp bin Main
+   java -Xms8g -Xmx8g -cp bin Main
   ```
 
