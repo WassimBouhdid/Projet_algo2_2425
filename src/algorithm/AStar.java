@@ -35,26 +35,23 @@ public class AStar {
     /**
      * Constructeur pour initialiser A*
      */
-    public AStar(Graph graph, Stop source, Stop target,
-                 LocalTime departure,
-                 CostFunction costFunction) {
-        this.graph        = graph;
-        this.source       = source;
-        this.target       = target;
+    public AStar(Graph graph, Stop source, Stop target, LocalTime departure, CostFunction costFunction) {
+        this.graph = graph;
+        this.source = source;
+        this.target = target;
         this.departureSec = departure.toSecondOfDay();
-        this.adj          = graph.getAdjacencyMap();
+        this.adj = graph.getAdjacencyMap();
         this.costFunction = costFunction;
     }
 
     /**
-     * @return liste des Arcs empruntés pour arriver à destination.
+     * @return liste des arcs empruntés pour arriver à destination.
      */
     public List<Edge> pathTo() {
         PriorityQueue<State> open = new PriorityQueue<>();
         Map<Stop, Integer> bestTime = new HashMap<>();
 
-        State start = new State(source, departureSec, 0,
-                heuristicSec(source), null, null);
+        State start = new State(source, departureSec, 0, heuristicSec(source), null, null);
         open.add(start);
         bestTime.put(source, departureSec);
 
@@ -73,7 +70,7 @@ public class AStar {
                 int depart = cur.timeSec;
                 if (e.getTripId() != null) {
                     int sched = e.getDepartureTimeSec();
-                    if (sched < depart) sched += 24*3600;
+                    if (sched < depart) sched += 24 * 3600;
                     depart = sched;
                 }
 
@@ -83,8 +80,8 @@ public class AStar {
                 Stop next = e.getTo();
                 if (arrive < bestTime.getOrDefault(next, Integer.MAX_VALUE)) {
                     bestTime.put(next, arrive);
-                    int g  = cur.gCost + c;
-                    int f  = g + heuristicSec(next);
+                    int g = cur.gCost + c;
+                    int f = g + heuristicSec(next);
                     open.add(new State(next, arrive, g, f, cur, e));
                 }
             }
@@ -97,10 +94,12 @@ public class AStar {
         return path;
     }
 
-    /** Heuristique: distance à vol d'oiseau / vitesse max (en secondes) */
+    /**
+     * Heuristique: distance à vol d'oiseau / vitesse max (en secondes)
+     */
     private int heuristicSec(Stop s) {
-        double dist     = graph.haversine(s, target);
-        double maxSpeed = 30.0; // m/s (~108 km/h)
-        return (int)(dist / maxSpeed);
+        double dist = graph.haversine(s, target);
+        double maxSpeed = 30.0; // m/s
+        return (int) (dist / maxSpeed);
     }
 }
