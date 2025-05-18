@@ -93,7 +93,7 @@ public class CSVReader {
                 Files.newBufferedReader(file, StandardCharsets.UTF_8),
                 16 * 1024
         )) {
-            // sauter l'en-tête
+            // sauter la première ligne
             br.readLine();
             String line;
             while ((line = br.readLine()) != null) {
@@ -162,7 +162,7 @@ public class CSVReader {
         int h = Integer.parseInt(parts[0]);
         int m = Integer.parseInt(parts[1]);
         int s = (parts.length > 2) ? Integer.parseInt(parts[2]) : 0;
-        // dans GTFS, 24:00:00 ou plus valide pour service après minuit
+        //24:00:00 ou plus valide pour service après minuit
         return LocalTime.of(h % 24, m, s);
     }
 }
