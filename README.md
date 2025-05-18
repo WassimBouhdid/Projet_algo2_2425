@@ -18,7 +18,18 @@ La fonction de coût est **configurable** : temps de parcours, nombre de changem
    ```bash
    mkdir -p bin
 
-Compilez tout le code source :
+3. Compilez tout le code source 
+   - sur windows :
+   ```bash
+   javac -d bin (Get-ChildItem -Recurse -Filter *.java -Path src).FullName
+   ```
+   - sur linux
+   ```bash
+   javac -d bin $(find src -name "*.java")
+   ```
+4.Executez le fichier 
 
+   ```bash
+   java -Xms8g -Xmx8g -cp bin Main
+  ```
 
-javac -d bin $(find src -name "*.java")
